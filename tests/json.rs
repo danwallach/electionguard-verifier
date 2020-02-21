@@ -12,7 +12,8 @@ fn test_parsing() -> Result<(), Box<dyn Error>> {
     for file in fs::read_dir("tests/")? {
         let file = file?;
         if let Some(ext) = file.path().extension() {
-            if ext == "json" {
+            // the file "unencrypted.json" isn't in the format that the Record parser expects
+            if ext == "json" && file.file_name() != "unencrypted.json" {
                 let input = fs::read_to_string(file.path())?;
                 let mut reader = Cursor::new(input);
                 from_reader::<_, schema::Record>(reader.by_ref())

@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 6bcfb9f9089c4418c6b576d8b57ea5b7df7f80c8ea53cfd3725987505df0204d # shrinks to elem = Coefficient { coefficient: BigUint { data: [1] } }, m = Coefficient { coefficient: BigUint { data: [] } }

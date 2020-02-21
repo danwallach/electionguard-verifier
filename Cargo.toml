@@ -6,14 +6,17 @@ edition = "2018"
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
-digest = "0.8.0"
-num = { version = "0.2.0", features = ["serde", "rand"] }
+digest = "0.8.1"
+num = { version = "0.2.1", features = ["serde", "rand"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.8.0"
-structopt = "0.2"
+sha2 = "0.8.1"
+structopt = "0.3.9"
 lazy_static = "1.4"
-rand = "0.5"
+rand = "0.5.6" # incompatible API changes in the newer 0.7.x crate
+
+[dev-dependencies]
+proptest = "0.9.5"
 
 [lib]
 path = "src/lib.rs"

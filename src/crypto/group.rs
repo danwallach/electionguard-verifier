@@ -566,8 +566,108 @@ lazy_static! {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
+    use num::Integer;
+    use proptest::prelude::*;
+
+    // Proptest generators for all the core types
+
+    prop_compose! {
+        // Returns arbitrarily large integers.
+        pub fn arb_biguint()(bits in any::<Vec<u32>>()) -> BigUint {
+            BigUint::new(bits)
+        }
+    }
+
+    prop_compose! {
+        // Returns an element in Z_p^*, i.e., [1,p).
+        pub fn arb_element()(num in arb_biguint()) -> Element {
+            Element::from(num.mod_floor(prime_minus_one()) + 1u32)
+        }
+    }
+
+    prop_compose! {
+        // Returns an element in Z_{p-1}.
+        pub fn arb_exponent()(num in arb_biguint()) -> Exponent {
+            Exponent::from(num.mod_floor(prime_minus_one()))
+        }
+    }
+
+    prop_compose! {
+        // Returns an element in Z_{p}.
+        pub fn arb_coefficient()(num in arb_biguint()) -> Coefficient {
+            Coefficient::from(num.mod_floor(prime()))
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_element_mul_identity(elem in arb_element()) {
+            assert_eq!(elem, &elem * &(Element::one()))
+        }
+
+        #[test]
+        fn test_element_mul_div_inverse(elem in arb_element(), m in arb_element()) {
+            assert_eq!(elem, (&elem * &m) / m)
+        }
+
+        #[test]
+        fn test_element_exp_identity(elem in arb_element()) {
+            let one = BigUint::from(1u32);
+            assert_eq!(elem, elem.pow(&one));
+        }
+
+        #[test]
+        fn test_element_square(elem in arb_element()) {
+            let two = BigUint::from(2u32);
+            assert_eq!(&elem * &elem, elem.pow(&two));
+        }
+
+        #[test]
+        fn test_coefficient_mul_identity(elem in arb_coefficient()) {
+            assert_eq!(elem, &elem * &(Coefficient::one()))
+        }
+
+        #[test]
+        fn test_coefficient_mul_div_inverse(
+            elem in arb_coefficient(),
+            m in arb_coefficient()
+                .prop_filter(
+                    "No multiplicative inverse for zero",
+                    |x| !(x == &Coefficient::from(BigUint::from(0u32))))) {
+            assert_eq!(elem, (&elem * &m) / m)
+        }
+
+        #[test]
+        fn test_coefficient_exp_identity(elem in arb_coefficient()) {
+            let one = BigUint::from(1u32);
+            assert_eq!(elem, elem.pow(&one));
+        }
+
+        #[test]
+        fn test_coefficient_square(elem in arb_coefficient()) {
+            let two = BigUint::from(2u32);
+            assert_eq!(&elem * &elem, elem.pow(&two));
+        }
+
+        #[test]
+        fn test_gen_pow(exp in arb_exponent()) {
+            assert_eq!(gen_pow(&exp), generator().pow(&exp))
+        }
+
+        #[test]
+        fn test_elem_to_exp_homomorphism(elem in arb_element(),
+            exp1 in arb_exponent(),
+            exp2 in arb_exponent()) {
+
+            let r1 = elem.pow(&exp1);
+            let r2 = elem.pow(&exp2);
+            let sum = exp1 + exp2;
+            let rsum = elem.pow(&sum);
+            assert_eq!(r1 * r2, rsum);
+        }
+    }
 
     #[test]
     fn all_primes_parse() {

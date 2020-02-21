@@ -46,6 +46,18 @@ impl Message {
         }
     }
 
+    // Decrypts a Message, yields `gᵐ` for plaintext `m`, requires knowing the appropriate
+    // `private_key`. No error checking!
+    pub fn decrypt(&self, private_key: &Exponent) -> Element {
+        // The message gives us g^r (self.public_key) and g^m * h^r (self.ciphertext)
+        // where h = g ^ private_key. So, we can compute (g^r)^a = g^ra, then divide
+        // and we'll get back g^m, which isn't exactly the plaintext, but it's no
+        // longer encrypted.
+
+        let g_ra = &self.public_key.pow(private_key);
+        &self.ciphertext / g_ra
+    }
+
     /// Homomorphic addition of encrypted messages.  Converts the encryptions of `a` and `b` into
     /// the encryption of `a + b`.
     pub fn h_add(&self, other: &Message) -> Message {
@@ -74,7 +86,85 @@ impl Message {
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use crate::crypto::group::test::*;
+    use num::traits::Zero;
     use num::BigUint;
+    use proptest::prelude::*;
+
+    prop_compose! {
+        pub fn arb_elgamal_keypair()(private_key in arb_exponent()
+                .prop_filter("non-zero private key needed so ElGamal isn't a no-op",
+                    |k| !k.is_zero())) -> (Exponent, Element) {
+            let public_key = generator().pow(&private_key);
+            (private_key, public_key)
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_elgamal_decryption(
+            keypair in arb_elgamal_keypair(),
+            m in arb_exponent(),
+            r in arb_exponent()) {
+
+            let encryption = Message::encrypt(&(keypair.1), m.as_uint(), &r);
+            let decryption = encryption.decrypt(&(keypair.0));
+
+            assert_eq!(generator().pow(&m), decryption);
+        }
+
+        #[test]
+        fn test_elgamal_homomorphism(
+            keypair in arb_elgamal_keypair(),
+            m1 in arb_exponent(),
+            m2 in arb_exponent(),
+            r1 in arb_exponent(),
+            r2 in arb_exponent()) {
+
+            let encryption1 = Message::encrypt(&(keypair.1), m1.as_uint(), &r1);
+            let encryption2 = Message::encrypt(&(keypair.1), m2.as_uint(), &r2);
+
+            let encrypted_sum = encryption1.h_add(&encryption2);
+            let decryption = encrypted_sum.decrypt(&(keypair.0));
+            let m_sum = m1 + m2;
+
+            assert_eq!(generator().pow(&m_sum), decryption);
+        }
+
+        #[test]
+        fn test_elgamal_inversion(
+            keypair in arb_elgamal_keypair(),
+            m1 in arb_exponent(),
+            m2 in arb_exponent(),
+            r1 in arb_exponent(),
+            r2 in arb_exponent()) {
+
+            let encryption1 = Message::encrypt(&(keypair.1), m1.as_uint(), &r1);
+            let encryption2 = Message::encrypt(&(keypair.1), m2.as_uint(), &r2);
+
+            let encrypted_sum = encryption1.h_add(&encryption2).h_sub(&encryption2);
+            let decryption = encrypted_sum.decrypt(&(keypair.0));
+
+            assert_eq!(generator().pow(&m1), decryption);
+        }
+
+        #[test]
+        fn test_elgamal_reencryption(
+            keypair in arb_elgamal_keypair(),
+            m in arb_exponent(),
+            r1 in arb_exponent(),
+            r2 in arb_exponent()
+                .prop_filter("non-zero reencryption needed to change input", |r| !r.is_zero())) {
+
+            let encryption = Message::encrypt(&(keypair.1), m.as_uint(), &r1);
+            let encrypted_zero = Message::encrypt(&(keypair.1), &BigUint::from(0_u32), &r2);
+            let reencryption = encryption.h_add(&encrypted_zero);
+            let decryption = reencryption.decrypt(&(keypair.0));
+
+            assert_eq!(generator().pow(&m), decryption);
+            assert!(reencryption.ciphertext != encryption.ciphertext);
+        }
+    }
 
     pub fn private_key() -> Exponent {
         BigUint::from(2546_u32).into()
