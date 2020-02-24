@@ -46,15 +46,39 @@ impl Message {
         }
     }
 
-    // Decrypts a Message, yields `gᵐ` for plaintext `m`, requires knowing the appropriate
-    // `private_key`. No error checking!
+    /// Decrypts a Message, yields `gᵐ` for plaintext `m`, requires knowing the appropriate
+    /// `private_key`. If the private_key is not correct, the results will be an
+    /// unknown element. You need your own error checking. Similarly, you'll need your
+    /// own logic to map from `gᵐ` back to `m` (e.g., a pre-computed lookup table).
     pub fn decrypt(&self, private_key: &Exponent) -> Element {
         // The message gives us g^r (self.public_key) and g^m * h^r (self.ciphertext)
-        // where h = g ^ private_key. So, we can compute (g^r)^a = g^ra, then divide
-        // and we'll get back g^m, which isn't exactly the plaintext, but it's no
-        // longer encrypted.
+        // where h = g ^ private_key. So, we can compute (g^r)^a = g^ra, which we can
+        // use to get back g^m, which isn't the plaintext, but it's no longer encrypted.
 
         let g_ra = &self.public_key.pow(private_key);
+        &self.ciphertext / g_ra
+    }
+
+    /// Decrypts a Message, yields `gᵐ` for plaintext `m`, but using the public-key
+    /// and one-time-secret rather than the private-key. If the arguments to this
+    /// function are incorrect, the results will be an unknown element. You need
+    ///  your own error checking. Similarly, you'll need your own logic to map from
+    /// `gᵐ` back to `m` (e.g., a pre-computed lookup table).
+    pub fn decrypt_with_one_time_secret(
+        &self,
+        public_key: &Element,
+        one_time_secret: &Exponent,
+    ) -> Element {
+        // The message gives us g^r (self.public_key) and g^m * h^r (self.ciphertext)
+        // where h = g ^ private_key. With the public key (g^a, not to be confused
+        // with self.public_key), we can raise that to the rth power, yielding g^ra.
+
+        // This decryption function is something that might be used when a voting
+        // machine is being challenged to prove that it created an encryption
+        // correctly. It also demonstrates the importance of throwing away the
+        // random numbers after computing a ciphertext.
+
+        let g_ra = &public_key.pow(one_time_secret);
         &self.ciphertext / g_ra
     }
 
@@ -102,7 +126,7 @@ pub mod test {
 
     proptest! {
         #[test]
-        fn test_elgamal_decryption(
+        fn test_elgamal_normal_decryption(
             keypair in arb_elgamal_keypair(),
             m in arb_exponent(),
             r in arb_exponent()) {
@@ -112,6 +136,19 @@ pub mod test {
 
             assert_eq!(generator().pow(&m), decryption);
         }
+
+        #[test]
+        fn test_elgamal_decryption_with_randomness(
+            keypair in arb_elgamal_keypair(),
+            m in arb_exponent(),
+            r in arb_exponent()) {
+
+            let encryption = Message::encrypt(&(keypair.1), m.as_uint(), &r);
+            let decryption = encryption.decrypt_with_one_time_secret(&(keypair.1), &r);
+
+            assert_eq!(generator().pow(&m), decryption);
+        }
+
 
         #[test]
         fn test_elgamal_homomorphism(
