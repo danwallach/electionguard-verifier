@@ -574,28 +574,28 @@ pub mod test {
     // Proptest generators for all the core types
 
     prop_compose! {
-        // Returns arbitrarily large integers.
+        /// Returns arbitrarily large integers.
         pub fn arb_biguint()(bits in any::<Vec<u32>>()) -> BigUint {
             BigUint::new(bits)
         }
     }
 
     prop_compose! {
-        // Returns an element in Z_p^*, i.e., [1,p).
+        /// Returns an element in Z_p^*, i.e., [1,p).
         pub fn arb_element()(num in arb_biguint()) -> Element {
             Element::from(num.mod_floor(prime_minus_one()) + 1u32)
         }
     }
 
     prop_compose! {
-        // Returns an element in Z_{p-1}.
+        /// Returns an element in Z_{p-1}.
         pub fn arb_exponent()(num in arb_biguint()) -> Exponent {
             Exponent::from(num.mod_floor(prime_minus_one()))
         }
     }
 
     prop_compose! {
-        // Returns an element in Z_{p}.
+        /// Returns an element in Z_{p}.
         pub fn arb_coefficient()(num in arb_biguint()) -> Coefficient {
             Coefficient::from(num.mod_floor(prime()))
         }

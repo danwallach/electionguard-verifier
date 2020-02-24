@@ -116,6 +116,7 @@ pub mod test {
     use proptest::prelude::*;
 
     prop_compose! {
+        /// Returns a tuple containing an arbitrary ElGamal keypair (private, public).
         pub fn arb_elgamal_keypair()(private_key in arb_exponent()
                 .prop_filter("non-zero private key needed so ElGamal isn't a no-op",
                     |k| !k.is_zero())) -> (Exponent, Element) {

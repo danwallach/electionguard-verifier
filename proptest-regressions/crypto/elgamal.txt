@@ -1,9 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc 3a52810f24f27e0b2322c49f4f27e706eb0d67b0853630d063c0ddfb885fe2cd # shrinks to keypair = (Exponent { exponent: BigUint { data: [] } }, Element { element: BigUint { data: [1] } }), m = Exponent { exponent: BigUint { data: [] } }, r = Exponent { exponent: BigUint { data: [1] } }
-cc 0aebbf36949e5c8c1b2ed06890e4c29835c770ed3975c5d1e78fa071db523136 # shrinks to keypair = (Exponent { exponent: BigUint { data: [] } }, Element { element: BigUint { data: [1] } }), m = Exponent { exponent: BigUint { data: [] } }, r1 = Exponent { exponent: BigUint { data: [] } }, r2 = Exponent { exponent: BigUint { data: [] } }
-cc eaa48b107be233033ee8de5a0f34368cd5d4611d81e714ddee33e00c200c73f1 # shrinks to keypair = (Exponent { exponent: BigUint { data: [] } }, Element { element: BigUint { data: [1] } }), m = Exponent { exponent: BigUint { data: [] } }, r1 = Exponent { exponent: BigUint { data: [] } }, r2 = Exponent { exponent: BigUint { data: [1] } }
