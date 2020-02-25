@@ -581,6 +581,13 @@ pub mod test {
     }
 
     prop_compose! {
+        /// Returns a vector of arbitrarily large integers.
+        pub fn arb_biguint_vec()(v in proptest::collection::vec(arb_biguint(), 1..100)) -> Vec<BigUint> {
+            v
+        }
+    }
+
+    prop_compose! {
         /// Returns an element in Z_p^*, i.e., [1,p).
         pub fn arb_element()(num in arb_biguint()) -> Element {
             Element::from(num.mod_floor(prime_minus_one()) + 1u32)

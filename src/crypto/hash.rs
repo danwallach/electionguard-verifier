@@ -90,3 +90,131 @@ pub fn hash_uuu(u1: &BigUint, u2: &BigUint, u3: &BigUint) -> BigUint {
 pub fn hash_uee(u: &BigUint, e1: &Element, e2: &Element) -> BigUint {
     hash_uints(&[u, e1.as_uint(), e2.as_uint()])
 }
+
+#[cfg(test)]
+pub mod test {
+    use super::*;
+    use crate::crypto::elgamal::test::*;
+    use crate::crypto::group::test::*;
+    use num::BigUint;
+    use proptest::prelude::*;
+    use std::fmt::Debug;
+
+    /// General-purpose hash tester. If the hashes are different, the values must
+    /// be different. If the values are equal, the hashes must be equal.
+    fn hash_compare<V: Debug + PartialEq>(h1: &BigUint, h2: &BigUint, v1: &V, v2: &V) {
+        let h1 = &h1;
+        let h2 = &h2;
+
+        if h1 != h2 {
+            assert_ne!(v1, v2);
+        }
+
+        if v1 == v2 {
+            assert_eq!(h1, h2);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_hash_uints(x in arb_biguint_vec(), y in arb_biguint_vec()) {
+            // Make copies to satisfy the types that the hash function wants.
+            // https://stackoverflow.com/questions/37797242/how-to-get-a-slice-of-references-from-a-vector-in-rust
+            let xary: &[&BigUint] = &(&x).iter().collect::<Vec<_>>();
+            let yary: &[&BigUint] = &(&y).iter().collect::<Vec<_>>();
+
+            let hx = hash_uints(xary);
+            let hy = hash_uints(yary);
+
+            hash_compare(&hx, &hx, &x, &x);
+            hash_compare(&hx, &hy, &x, &y);
+        }
+
+        #[test]
+        fn test_hash_umc(u1 in arb_biguint(), m1 in arb_elgamal_message(), c1 in arb_elgamal_message(), u2 in arb_biguint(), m2 in arb_elgamal_message(), c2 in arb_elgamal_message()) {
+            let h0 = hash_umc(&u1, &m1, &c1);
+            let h1 = hash_umc(&u1, &m1, &c2);
+            let h2 = hash_umc(&u2, &m1, &c1);
+            let h3 = hash_umc(&u1, &m2, &c1);
+            let h4 = hash_umc(&u2, &m2, &c2);
+
+            let t0 = (&u1, &m1, &c1);
+            let t1 = (&u1, &m1, &c2);
+            let t2 = (&u2, &m1, &c1);
+            let t3 = (&u1, &m2, &c1);
+            let t4 = (&u2, &m2, &c2);
+
+            hash_compare(&h0, &h0, &t0, &t0);
+            hash_compare(&h0, &h1, &t0, &t1);
+            hash_compare(&h0, &h2, &t0, &t2);
+            hash_compare(&h0, &h3, &t0, &t3);
+            hash_compare(&h0, &h4, &t0, &t4);
+        }
+
+        #[test]
+        fn test_hash_umcc(u1 in arb_biguint(), m1 in arb_elgamal_message(), c1 in arb_elgamal_message(), cc1 in arb_elgamal_message(), u2 in arb_biguint(), m2 in arb_elgamal_message(), c2 in arb_elgamal_message(), cc2 in arb_elgamal_message()) {
+            let h0 = hash_umcc(&u1, &m1, &c1, &cc1);
+            let h1 = hash_umcc(&u1, &m1, &c2, &cc1);
+            let h2 = hash_umcc(&u2, &m1, &c1, &cc1);
+            let h3 = hash_umcc(&u1, &m2, &c1, &cc1);
+            let h4 = hash_umcc(&u1, &m1, &c1, &cc2);
+            let h5 = hash_umcc(&u2, &m2, &c2, &cc2);
+
+            let t0 = (&u1, &m1, &c1, &cc1);
+            let t1 = (&u1, &m1, &c2, &cc1);
+            let t2 = (&u2, &m1, &c1, &cc1);
+            let t3 = (&u1, &m2, &c1, &cc1);
+            let t4 = (&u1, &m1, &c1, &cc2);
+            let t5 = (&u2, &m2, &c2, &cc2);
+
+            hash_compare(&h0, &h0, &t0, &t0);
+            hash_compare(&h0, &h1, &t0, &t1);
+            hash_compare(&h0, &h2, &t0, &t2);
+            hash_compare(&h0, &h3, &t0, &t3);
+            hash_compare(&h0, &h4, &t0, &t4);
+            hash_compare(&h0, &h5, &t0, &t5);
+        }
+
+        #[test]
+        fn test_hash_uuu(u1 in arb_biguint(), u2 in arb_biguint(), u3 in arb_biguint(), v1 in arb_biguint(), v2 in arb_biguint(), v3 in arb_biguint()) {
+            let h0 = hash_uuu(&u1, &u2, &u3);
+            let h1 = hash_uuu(&v1, &u2, &u3);
+            let h2 = hash_uuu(&u1, &v2, &u3);
+            let h3 = hash_uuu(&u1, &u2, &v3);
+            let h4 = hash_uuu(&v1, &v2, &v3);
+
+            let t0 = (&u1, &u2, &u3);
+            let t1 = (&v1, &u2, &u3);
+            let t2 = (&u1, &v2, &u3);
+            let t3 = (&u1, &u2, &v3);
+            let t4 = (&v1, &v2, &v3);
+
+            hash_compare(&h0, &h0, &t0, &t0);
+            hash_compare(&h0, &h1, &t0, &t1);
+            hash_compare(&h0, &h2, &t0, &t2);
+            hash_compare(&h0, &h3, &t0, &t3);
+            hash_compare(&h0, &h4, &t0, &t4);
+        }
+
+        #[test]
+        fn test_hash_uee(u1 in arb_biguint(), e1 in arb_element(), ee1 in arb_element(), u2 in arb_biguint(), e2 in arb_element(), ee2 in arb_element()) {
+            let h0 = hash_uee(&u1, &e1, &ee1);
+            let h1 = hash_uee(&u2, &e1, &ee1);
+            let h2 = hash_uee(&u1, &e2, &ee1);
+            let h3 = hash_uee(&u1, &e1, &ee2);
+            let h4 = hash_uee(&u2, &e2, &ee2);
+
+            let t0 = (&u1, &e1, &ee1);
+            let t1 = (&u2, &e1, &ee1);
+            let t2 = (&u1, &e2, &ee1);
+            let t3 = (&u1, &e1, &ee2);
+            let t4 = (&u2, &e2, &ee2);
+
+            hash_compare(&h0, &h0, &t0, &t0);
+            hash_compare(&h0, &h1, &t0, &t1);
+            hash_compare(&h0, &h2, &t0, &t2);
+            hash_compare(&h0, &h3, &t0, &t3);
+            hash_compare(&h0, &h4, &t0, &t4);
+        }
+    }
+}

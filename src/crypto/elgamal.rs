@@ -125,6 +125,14 @@ pub mod test {
         }
     }
 
+    prop_compose! {
+        /// Returns an arbitrary ElGamal message. No two messages will be encrypted
+        /// with the same keys, so only really useful if you don't care about decryption.
+        pub fn arb_elgamal_message()(keypair in arb_elgamal_keypair(), m in arb_exponent(), r in arb_exponent()) -> Message {
+            Message::encrypt(&(keypair.1), m.as_uint(), &r)
+        }
+    }
+
     proptest! {
         #[test]
         fn test_elgamal_normal_decryption(
