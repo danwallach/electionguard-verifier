@@ -432,8 +432,8 @@ impl ResponseStatus {
 #[cfg(test)]
 mod test {
     use super::Proof;
-    use crate::crypto::elgamal::Message;
     use crate::crypto::elgamal::test::*;
+    use crate::crypto::elgamal::Message;
     use crate::crypto::group::prime;
     use crate::crypto::group::test::*;
     use crate::crypto::hash::hash_umc;

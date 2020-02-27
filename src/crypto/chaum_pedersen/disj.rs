@@ -159,124 +159,142 @@ impl Status {
 #[cfg(test)]
 mod test {
     use super::Proof;
+    use crate::crypto::elgamal::test::*;
     use crate::crypto::elgamal::{self, Message};
+    use crate::crypto::group::test::*;
     use crate::crypto::hash::hash_umcc;
+    use num::traits::{One, Zero};
+    use num::BigUint;
+    use proptest::prelude::*;
 
-    /// Encrypt the value zero, prove that it's either zero or one, and check both parts of the
-    /// proof.
-    #[test]
-    fn prove_check_disj_zero() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+    proptest! {
+        /// Encrypt the value zero, prove that it's either zero or one, and check both parts of the
+        /// proof.
+        #[test]
+        fn prove_check_disj_zero(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            real_one_time_exponent in arb_exponent(),
+            fake_challenge in arb_exponent(),
+            fake_response in arb_exponent()
+        ) {
+            let public_key = keypair.1;
 
-        let one_time_secret = 8768_u32.into();
-        let message = Message::encrypt(&public_key, &0_u8.into(), &one_time_secret);
-        let real_one_time_exponent = 24256_u32.into();
-        let fake_challenge = 30125_u32.into();
-        let fake_response = 6033_u32.into();
-        let proof = Proof::prove_zero(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &real_one_time_exponent,
-            &fake_challenge,
-            &fake_response,
-            |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
-        );
+            let message = Message::encrypt(&public_key, &0_u8.into(), &one_time_secret);
+            let proof = Proof::prove_zero(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &real_one_time_exponent,
+                &fake_challenge,
+                &fake_response,
+                |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
+            );
 
-        let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
-            hash_umcc(&extended_base_hash, msg, comm0, comm1)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
+                hash_umcc(&extended_base_hash, msg, comm0, comm1)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-    /// Encrypt the value one, prove that it's either zero or one, and check both parts of the
-    /// proof.
-    #[test]
-    fn prove_check_disj_one() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+        /// Encrypt the value one, prove that it's either zero or one, and check both parts of the
+        /// proof.
+        #[test]
+        fn prove_check_disj_one(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            real_one_time_exponent in arb_exponent(),
+            fake_challenge in arb_exponent(),
+            fake_response in arb_exponent()
+        ) {
+            let public_key = keypair.1;
 
-        let one_time_secret = 8768_u32.into();
-        let message = Message::encrypt(&public_key, &1_u8.into(), &one_time_secret);
-        let real_one_time_exponent = 24256_u32.into();
-        let fake_challenge = 30125_u32.into();
-        let fake_response = 6033_u32.into();
-        let proof = Proof::prove_one(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &real_one_time_exponent,
-            &fake_challenge,
-            &fake_response,
-            |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
-        );
+            let message = Message::encrypt(&public_key, &1_u8.into(), &one_time_secret);
+            let proof = Proof::prove_one(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &real_one_time_exponent,
+                &fake_challenge,
+                &fake_response,
+                |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
+            );
 
-        let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
-            hash_umcc(&extended_base_hash, msg, comm0, comm1)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
+                hash_umcc(&extended_base_hash, msg, comm0, comm1)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-    /// Encrypt the value two, construct a proof that falsely claims it's either zero or one, and check
-    /// both parts of the proof (which should fail).
-    #[test]
-    #[should_panic]
-    fn prove_check_disj_two() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+        /// Encrypt an arbitrary (non-0 or 1) value, construct a proof that falsely claims
+        /// it's either zero or one, and check both parts of the proof (which should fail).
+        #[test]
+        #[should_panic]
+        fn prove_check_disj_nonzero_or_one(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            real_one_time_exponent in arb_exponent(),
+            fake_challenge in arb_exponent(),
+            fake_response in arb_exponent(),
+            fake_value in arb_exponent()
+        ) {
+            let public_key = keypair.1;
+            let fake_value = fake_value.as_uint();
+            prop_assume!(fake_value != &BigUint::zero() && fake_value != &BigUint::one());
 
-        let one_time_secret = 8768_u32.into();
-        let message = Message::encrypt(&public_key, &2_u8.into(), &one_time_secret);
-        let real_one_time_exponent = 24256_u32.into();
-        let fake_challenge = 30125_u32.into();
-        let fake_response = 6033_u32.into();
-        let proof = Proof::prove_zero(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &real_one_time_exponent,
-            &fake_challenge,
-            &fake_response,
-            |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
-        );
+            let message = Message::encrypt(&public_key, fake_value, &one_time_secret);
+            let proof = Proof::prove_zero(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &real_one_time_exponent,
+                &fake_challenge,
+                &fake_response,
+                |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
+            );
 
-        let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
-            hash_umcc(&extended_base_hash, msg, comm0, comm1)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
+                hash_umcc(&extended_base_hash, msg, comm0, comm1)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-    /// Encrypt the value zero, wrongly construct a proof using `prove_one`, and check both parts of
-    /// the proof (which should fail).
-    #[test]
-    #[should_panic]
-    fn prove_check_disj_one_flipped() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+        /// Encrypt the value zero, wrongly construct a proof using `prove_one`, and check both parts of
+        /// the proof (which should fail).
+        #[test]
+        #[should_panic]
+        fn prove_check_disj_one_flipped(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            real_one_time_exponent in arb_exponent(),
+            fake_challenge in arb_exponent(),
+            fake_response in arb_exponent()
+        ) {
+            let public_key = keypair.1;
 
-        let one_time_secret = 8768_u32.into();
-        let message = Message::encrypt(&public_key, &0_u8.into(), &one_time_secret);
-        let real_one_time_exponent = 24256_u32.into();
-        let fake_challenge = 30125_u32.into();
-        let fake_response = 6033_u32.into();
-        let proof = Proof::prove_one(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &real_one_time_exponent,
-            &fake_challenge,
-            &fake_response,
-            |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
-        );
+            let message = Message::encrypt(&public_key, &0_u8.into(), &one_time_secret);
+            let proof = Proof::prove_one(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &real_one_time_exponent,
+                &fake_challenge,
+                &fake_response,
+                |msg, comm0, comm1| hash_umcc(&extended_base_hash, msg, comm0, comm1),
+            );
 
-        let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
-            hash_umcc(&extended_base_hash, msg, comm0, comm1)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
+            let status = proof.check_zero_one(&public_key, &message, |msg, comm0, comm1| {
+                hash_umcc(&extended_base_hash, msg, comm0, comm1)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
     }
 }
