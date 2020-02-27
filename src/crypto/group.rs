@@ -595,14 +595,24 @@ pub mod test {
     }
 
     prop_compose! {
-        /// Returns an element in Z_{p-1}.
+        /// Returns an element in Z_{p-1}, i.e., [0, p-1).
         pub fn arb_exponent()(num in arb_biguint()) -> Exponent {
             Exponent::from(num.mod_floor(prime_minus_one()))
         }
     }
 
     prop_compose! {
-        /// Returns an element in Z_{p}.
+        /// Returns an element in Z_{p-1}*, i.e., [1,p-1).
+        pub fn arb_nonzero_exponent()(
+            num in arb_biguint()
+                .prop_map(|n| n.mod_floor(prime_minus_one()))
+                .prop_filter("we don't want zeros", |n| !n.is_zero())) -> Exponent {
+            Exponent::from(num)
+        }
+    }
+
+    prop_compose! {
+        /// Returns an element in Z_{p}, i.e., [0, p)
         pub fn arb_coefficient()(num in arb_biguint()) -> Coefficient {
             Coefficient::from(num.mod_floor(prime()))
         }

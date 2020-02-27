@@ -432,396 +432,443 @@ impl ResponseStatus {
 #[cfg(test)]
 mod test {
     use super::Proof;
-    use crate::crypto::elgamal::{self, Message};
-    use crate::crypto::group::{generator, prime, Element, Exponent};
+    use crate::crypto::elgamal::Message;
+    use crate::crypto::elgamal::test::*;
+    use crate::crypto::group::prime;
+    use crate::crypto::group::test::*;
     use crate::crypto::hash::hash_umc;
     use num::traits::Pow;
+    use proptest::prelude::*;
 
-    /// Encrypt a zero, construct a Chaum-Pedersen proof that it's zero, and check the proof.
-    #[test]
-    fn prove_check_zero() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+    proptest! {
+        /// Encrypt a zero, construct a Chaum-Pedersen proof that it's zero, and check the proof.
+        #[test]
+        fn prove_check_zero(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let public_key = keypair.1;
+            let plaintext = &0_u32.into();
 
-        let one_time_secret = 2140_u32.into();
-        let message = Message::encrypt(&public_key, &0_u32.into(), &one_time_secret);
-        let one_time_exponent = 3048_u32.into();
-        let proof = Proof::prove_zero(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let ciphertext = Message::encrypt(&public_key, &plaintext, &one_time_secret);
+            let proof = Proof::prove_zero(
+                &public_key,
+                &ciphertext,
+                &one_time_secret,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let status = proof.check_zero(&public_key, &message, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let status = proof.check_zero(&public_key, &ciphertext, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-    /// Encrypt a nonzero value, construct a Chaum-Pedersen proof claiming it's zero, and check the
-    /// proof (which should fail).
-    #[test]
-    #[should_panic]
-    fn prove_check_zero_fail() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+        /// Encrypt a nonzero value, construct a Chaum-Pedersen proof claiming it's zero, and check the
+        /// proof (which should fail).
+        #[test]
+        #[should_panic]
+        fn prove_check_zero_fail(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            non_zero in arb_nonzero_exponent(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let public_key = keypair.1;
+            let message = Message::encrypt(&public_key, &non_zero.as_uint(), &one_time_secret);
+            let proof = Proof::prove_zero(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let one_time_secret = 2140_u32.into();
-        let message = Message::encrypt(&public_key, &1_u32.into(), &one_time_secret);
-        let one_time_exponent = 3048_u32.into();
-        let proof = Proof::prove_zero(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let status = proof.check_zero(&public_key, &message, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check_zero(&public_key, &message, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// This is `prove_check_zero`, but using the largest possible nonce for the message encryption.
+        /// This lets us check that we have the right modulus (p vs. p - 1) in certain places.
+        #[test]
+        fn prove_check_zero_extreme_nonce(
+            keypair in arb_elgamal_keypair(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let public_key = keypair.1;
+            let one_time_secret = (prime() - 2_u32).into();
+            let plaintext = &0_u32.into();
 
-    /// This is `prove_check_zero`, but using the largest possible nonce for the message encryption.
-    /// This lets us check that we have the right modulus (p vs. p - 1) in certain places.
-    #[test]
-    fn prove_check_zero_extreme_nonce() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let ciphertext = Message::encrypt(&public_key, &plaintext, &one_time_secret);
+            let proof = Proof::prove_zero(
+                &public_key,
+                &ciphertext,
+                &one_time_secret,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let one_time_secret = (prime() - 2_u32).into();
-        let message = Message::encrypt(&public_key, &0_u32.into(), &one_time_secret);
-        let one_time_exponent = 3048_u32.into();
-        let proof = Proof::prove_zero(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let status = proof.check_zero(&public_key, &ciphertext, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check_zero(&public_key, &message, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// Encrypt the same value twice, construct a Chaum-Pedersen proof that they're equal, and check
+        /// the proof.
+        #[test]
+        fn prove_check_equal(
+            keypair in arb_elgamal_keypair(),
+            value in arb_exponent(),
+            one_time_secret1 in arb_exponent(),
+            one_time_secret2 in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            prop_assume!(one_time_secret1 != one_time_secret2);
 
-    /// Encrypt the same value twice, construct a Chaum-Pedersen proof that they're equal, and check
-    /// the proof.
-    #[test]
-    fn prove_check_equal() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let public_key = keypair.1;
+            let message1 = Message::encrypt(&public_key, &value.as_uint(), &one_time_secret1);
+            let message2 = Message::encrypt(&public_key, &value.as_uint(), &one_time_secret2);
 
-        let value = 30712_u32.into();
-        let one_time_secret1 = 20147_u32.into();
-        let message1 = Message::encrypt(&public_key, &value, &one_time_secret1);
-        let one_time_secret2 = 7494_u32.into();
-        let message2 = Message::encrypt(&public_key, &value, &one_time_secret2);
-        let one_time_exponent = 9195_u32.into();
+            let proof = Proof::prove_equal(
+                &public_key,
+                &message1,
+                &one_time_secret1,
+                &message2,
+                &one_time_secret2,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let proof = Proof::prove_equal(
-            &public_key,
-            &message1,
-            &one_time_secret1,
-            &message2,
-            &one_time_secret2,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let status = proof.check_equal(&public_key, &message1, &message2, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check_equal(&public_key, &message1, &message2, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// Encrypt two different values, construct a Chaum-Pedersen proof that claims they're equal, and
+        /// check the proof (which should fail).
+        #[test]
+        #[should_panic]
+        fn prove_check_equal_fail(
+            keypair in arb_elgamal_keypair(),
+            value1 in arb_exponent(),
+            value2 in arb_exponent(),
+            one_time_secret1 in arb_exponent(),
+            one_time_secret2 in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            prop_assume!(one_time_secret1 != one_time_secret2);
+            prop_assume!(value1 != value2);
 
-    /// Encrypt two different values, construct a Chaum-Pedersen proof that claims they're equal, and
-    /// check the proof (which should fail).
-    #[test]
-    #[should_panic]
-    fn prove_check_equal_fail() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let public_key = keypair.1;
+            let message1 = Message::encrypt(&public_key, &value1.as_uint(), &one_time_secret1);
+            let message2 = Message::encrypt(&public_key, &value2.as_uint(), &one_time_secret2);
 
-        let value1 = 30712_u32.into();
-        let one_time_secret1 = 20147_u32.into();
-        let message1 = Message::encrypt(&public_key, &value1, &one_time_secret1);
-        let value2 = 2471_u32.into();
-        let one_time_secret2 = 7494_u32.into();
-        let message2 = Message::encrypt(&public_key, &value2, &one_time_secret2);
-        let one_time_exponent = 9195_u32.into();
+            let proof = Proof::prove_equal(
+                &public_key,
+                &message1,
+                &one_time_secret1,
+                &message2,
+                &one_time_secret2,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let proof = Proof::prove_equal(
-            &public_key,
-            &message1,
-            &one_time_secret1,
-            &message2,
-            &one_time_secret2,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let status = proof.check_equal(&public_key, &message1, &message2, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check_equal(&public_key, &message1, &message2, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// This is `prove_check_equal`, but using the largest possible nonce for one of the encryptions.
+        /// This lets us check that we have the right modulus (p vs. p - 1) in certain places.
+        #[test]
+        fn prove_check_equal_extreme_nonce(
+            keypair in arb_elgamal_keypair(),
+            value in arb_exponent(),
+            one_time_secret1 in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let one_time_secret2 = (prime() - 2_u32).into();
+            prop_assume!(one_time_secret1 != one_time_secret2);
 
-    /// This is `prove_check_equal`, but using the largest possible nonce for one of the encryptions.
-    /// This lets us check that we have the right modulus (p vs. p - 1) in certain places.
-    #[test]
-    fn prove_check_equal_extreme_nonce() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let public_key = keypair.1;
+            let message1 = Message::encrypt(&public_key, &value.as_uint(), &one_time_secret1);
+            let message2 = Message::encrypt(&public_key, &value.as_uint(), &one_time_secret2);
 
-        let value = 30712_u32.into();
-        let one_time_secret1 = 7494_u32.into();
-        let message1 = Message::encrypt(&public_key, &value, &one_time_secret1);
-        let one_time_secret2 = (prime() - 2_u32).into();
-        let message2 = Message::encrypt(&public_key, &value, &one_time_secret2);
-        let one_time_exponent = 9195_u32.into();
+            let proof = Proof::prove_equal(
+                &public_key,
+                &message1,
+                &one_time_secret1,
+                &message2,
+                &one_time_secret2,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let proof = Proof::prove_equal(
-            &public_key,
-            &message1,
-            &one_time_secret1,
-            &message2,
-            &one_time_secret2,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let status = proof.check_equal(&public_key, &message1, &message2, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check_equal(&public_key, &message1, &message2, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// Encrypt a value, construct a Chaum-Pedersen proof that it's that value, and check the proof.
+        #[test]
+        fn prove_check_plaintext(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            value in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let public_key = keypair.1;
+            let value = value.as_uint(); // convert to BigUint, used by methods below
+            let message = Message::encrypt(&public_key, &value, &one_time_secret);
+            let proof = Proof::prove_plaintext(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &value,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-    /// Encrypt a value, construct a Chaum-Pedersen proof that it's that value, and check the proof.
-    #[test]
-    fn prove_check_plaintext() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let status = proof.check_plaintext(&public_key, &message, &value, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let value = 11935_u32.into();
-        let one_time_secret = 13797_u32.into();
-        let message = Message::encrypt(&public_key, &value, &one_time_secret);
-        let one_time_exponent = 30612_u32.into();
-        let proof = Proof::prove_plaintext(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &value,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+        /// Encrypt a value, construct a Chaum-Pedersen proof claiming it's a different value, and check
+        /// the proof (which should fail).
+        #[test]
+        #[should_panic]
+        fn prove_check_plaintext_fail(
+            keypair in arb_elgamal_keypair(),
+            one_time_secret in arb_exponent(),
+            value in arb_exponent(),
+            other_value in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            prop_assume!(other_value != value);
+            let public_key = keypair.1;
 
-        let status = proof.check_plaintext(&public_key, &message, &value, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let message = Message::encrypt(&public_key, &value.as_uint(), &one_time_secret);
+            let proof = Proof::prove_plaintext(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &other_value.as_uint(),
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-    /// Encrypt a value, construct a Chaum-Pedersen proof claiming it's a different value, and check
-    /// the proof (which should fail).
-    #[test]
-    #[should_panic]
-    fn prove_check_plaintext_fail() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let status = proof.check_plaintext(&public_key, &message, &other_value.as_uint(), |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let value = 11935_u32.into();
-        let other_value = 1609_u32.into();
-        let one_time_secret = 13797_u32.into();
-        let message = Message::encrypt(&public_key, &value, &one_time_secret);
-        let one_time_exponent = 30612_u32.into();
-        let proof = Proof::prove_plaintext(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &other_value,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+        /// This is `prove_check_plaintext`, but using the largest possible nonce for the message
+        /// encryption.  This lets us check that we have the right modulus (p vs. p - 1) in certain places.
+        #[test]
+        fn prove_check_plaintext_extreme_nonce(
+            keypair in arb_elgamal_keypair(),
+            one_time_exponent in arb_exponent(),
+            value in arb_exponent(),
+            extended_base_hash in arb_biguint(),
+        ) {
+            let public_key = keypair.1;
+            let one_time_secret = (prime() - 2_u32).into();
+            let value = value.as_uint(); // convert to BigUint, used by methods below
+            let message = Message::encrypt(&public_key, &value, &one_time_secret);
+            let proof = Proof::prove_plaintext(
+                &public_key,
+                &message,
+                &one_time_secret,
+                &value,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let status = proof.check_plaintext(&public_key, &message, &other_value, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let status = proof.check_plaintext(&public_key, &message, &value, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-    /// This is `prove_check_plaintext`, but using the largest possible nonce for the message
-    /// encryption.  This lets us check that we have the right modulus (p vs. p - 1) in certain places.
-    #[test]
-    fn prove_check_plaintext_extreme_nonce() {
-        let public_key = elgamal::test::public_key();
-        let extended_base_hash = elgamal::test::extended_base_hash();
+        /// Generate a key pair, raise a value to the secret key, construct a Chaum-Pedersen proof the
+        /// exponentiation was done correctly, and check the proof.
+        #[test]
+        fn prove_check_exp(
+            keypair in arb_elgamal_keypair(),
+            base in arb_element(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let (secret_key, public_key) = keypair;
 
-        let value = 11935_u32.into();
-        let one_time_secret = (prime() - 2_u32).into();
-        let message = Message::encrypt(&public_key, &value, &one_time_secret);
-        let one_time_exponent = 30612_u32.into();
-        let proof = Proof::prove_plaintext(
-            &public_key,
-            &message,
-            &one_time_secret,
-            &value,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let result = base.pow(&secret_key);
+            let proof = Proof::prove_exp(
+                &public_key,
+                &secret_key,
+                &base,
+                &result,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let status = proof.check_plaintext(&public_key, &message, &value, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let status = proof.check_exp(&public_key, &base, &result, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-    /// Generate a key pair, raise a value to the secret key, construct a Chaum-Pedersen proof the
-    /// exponentiation was done correctly, and check the proof.
-    #[test]
-    fn prove_check_exp() {
-        let extended_base_hash = elgamal::test::extended_base_hash();
+        /// Generate a key pair, raise a value to some other exponent, construct an invalid
+        /// Chaum-Pedersen proof claiming that the exponentiation was done correctly, and check the
+        /// proof.
+        #[test]
+        #[should_panic]
+        fn prove_check_exp_fail(
+            keypair in arb_elgamal_keypair(),
+            base in arb_element(),
+            extended_base_hash in arb_biguint(),
+            other_exponent in arb_exponent(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let secret_key = keypair.0;
+            let public_key = keypair.1;
+            prop_assume!(secret_key != other_exponent);
 
-        let secret_key = 22757_u32.into();
-        let public_key = generator().pow(&secret_key);
+            let result = base.pow(&other_exponent);
+            let proof = Proof::prove_exp(
+                &public_key,
+                &secret_key,
+                &base,
+                &result,
+                &one_time_exponent,
+                |msg, comm| hash_umc(&extended_base_hash, msg, comm),
+            );
 
-        let base: Element = 1033_u32.into();
-        let result = base.pow(&secret_key);
-        let one_time_exponent = 26480_u32.into();
-        let proof = Proof::prove_exp(
-            &public_key,
-            &secret_key,
-            &base,
-            &result,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+            let status = proof.check_exp(&public_key, &base, &result, |msg, comm| {
+                hash_umc(&extended_base_hash, msg, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check_exp(&public_key, &base, &result, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// Encrypt a nonzero value, construct a fake proof that it's zero using a pre-selected challenge,
+        /// and check the proof (which should pass).
+        #[test]
+        fn simulate_transcript_zero(
+            keypair in arb_elgamal_keypair(),
+            value in arb_exponent(),
+            one_time_secret in arb_exponent(),
+            challenge in arb_exponent(),
+            response in arb_exponent()
+        ) {
+            let public_key = keypair.1;
 
-    /// Generate a key pair, raise a value to some other exponent, construct an invalid
-    /// Chaum-Pedersen proof claiming that the exponentiation was done correctly, and check the
-    /// proof.
-    #[test]
-    #[should_panic]
-    fn prove_check_exp_fail() {
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let message = Message::encrypt(&public_key, &value.as_uint(), &one_time_secret);
+            let proof = Proof::simulate_zero(&public_key, &message, &challenge, &response);
 
-        let secret_key = 22757_u32.into();
-        let public_key = generator().pow(&secret_key);
-        let other_exponent: Exponent = 19315_u32.into();
+            let status = proof.transcript_zero(&public_key, &message);
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let base: Element = 1033_u32.into();
-        let result = base.pow(&other_exponent);
-        let one_time_exponent = 26480_u32.into();
-        let proof = Proof::prove_exp(
-            &public_key,
-            &secret_key,
-            &base,
-            &result,
-            &one_time_exponent,
-            |msg, comm| hash_umc(&extended_base_hash, msg, comm),
-        );
+        /// Encrypt a nonzero value, construct a fake proof that it's zero using a pre-selected challenge,
+        /// and check the proof (which should pass).
+        #[test]
+        fn simulate_transcript_equal(
+            keypair in arb_elgamal_keypair(),
+            value1 in arb_exponent(),
+            value2 in arb_exponent(),
+            one_time_secret1 in arb_exponent(),
+            one_time_secret2 in arb_exponent(),
+            challenge in arb_exponent(),
+            response in arb_exponent()
+        ) {
+            prop_assume!(value1 != value2);
+            prop_assume!(one_time_secret1 != one_time_secret2);
 
-        let status = proof.check_exp(&public_key, &base, &result, |msg, comm| {
-            hash_umc(&extended_base_hash, msg, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let public_key = keypair.1;
 
-    /// Encrypt a nonzero value, construct a fake proof that it's zero using a pre-selected challenge,
-    /// and check the proof (which should pass).
-    #[test]
-    fn simulate_transcript_zero() {
-        let public_key = elgamal::test::public_key();
+            let message1 = Message::encrypt(&public_key, &value1.as_uint(), &one_time_secret1);
+            let message2 = Message::encrypt(&public_key, &value2.as_uint(), &one_time_secret2);
+            let proof = Proof::simulate_equal(&public_key, &message1, &message2, &challenge, &response);
 
-        let value = 16351_u32.into();
-        let one_time_secret = 18328_u32.into();
-        let message = Message::encrypt(&public_key, &value, &one_time_secret);
-        let challenge = 11947_u32.into();
-        let response = 30170_u32.into();
-        let proof = Proof::simulate_zero(&public_key, &message, &challenge, &response);
+            let status = proof.transcript_equal(&public_key, &message1, &message2);
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.transcript_zero(&public_key, &message);
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// Encrypt a nonzero value, construct a fake proof that it's zero using a pre-selected challenge,
+        /// and check the proof (which should pass).
+        #[test]
+        fn simulate_transcript_plaintext(
+            keypair in arb_elgamal_keypair(),
+            value in arb_exponent(),
+            one_time_secret in arb_exponent(),
+            plaintext in arb_exponent(),
+            challenge in arb_exponent(),
+            response in arb_exponent()
+        ) {
+            let public_key = keypair.1;
 
-    /// Encrypt a nonzero value, construct a fake proof that it's zero using a pre-selected challenge,
-    /// and check the proof (which should pass).
-    #[test]
-    fn simulate_transcript_equal() {
-        let public_key = elgamal::test::public_key();
+            let value = value.as_uint();
+            let plaintext = plaintext.as_uint();
 
-        let value1 = 16941_u32.into();
-        let one_time_secret1 = 14409_u32.into();
-        let message1 = Message::encrypt(&public_key, &value1, &one_time_secret1);
-        let value2 = 20440_u32.into();
-        let one_time_secret2 = 15529_u32.into();
-        let message2 = Message::encrypt(&public_key, &value2, &one_time_secret2);
-        let challenge = 2563_u32.into();
-        let response = 4492_u32.into();
-        let proof = Proof::simulate_equal(&public_key, &message1, &message2, &challenge, &response);
+            let message = Message::encrypt(&public_key, &value, &one_time_secret);
+            let proof =
+                Proof::simulate_plaintext(&public_key, &message, &plaintext, &challenge, &response);
 
-        let status = proof.transcript_equal(&public_key, &message1, &message2);
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+            let status = proof.transcript_plaintext(&public_key, &message, &plaintext);
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-    /// Encrypt a nonzero value, construct a fake proof that it's zero using a pre-selected challenge,
-    /// and check the proof (which should pass).
-    #[test]
-    fn simulate_transcript_plaintext() {
-        let public_key = elgamal::test::public_key();
+        /// Construct a fake proof that `result` is `base` raised to a secret key, and check the proof
+        /// (which should pass).
+        #[test]
+        fn simulate_transcript_exp(
+            keypair in arb_elgamal_keypair(),
+            base in arb_element(),
+            other_exponent in arb_exponent(),
+            challenge in arb_exponent(),
+            response in arb_exponent()
+        ) {
+            let (secret_key, public_key) = keypair;
+            prop_assume!(other_exponent != secret_key);
 
-        let value = 15271_u32.into();
-        let one_time_secret = 482_u32.into();
-        let message = Message::encrypt(&public_key, &value, &one_time_secret);
-        let plaintext = 8049_u32.into();
-        let challenge = 8508_u32.into();
-        let response = 23843_u32.into();
-        let proof =
-            Proof::simulate_plaintext(&public_key, &message, &plaintext, &challenge, &response);
+            let result = base.pow(&other_exponent);
+            let proof = Proof::simulate_exp(&public_key, &base, &result, &challenge, &response);
 
-        let status = proof.transcript_plaintext(&public_key, &message, &plaintext);
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
-
-    /// Construct a fake proof that `result` is `base` raised to a secret key, and check the proof
-    /// (which should pass).
-    #[test]
-    fn simulate_transcript_exp() {
-        let public_key = 31195_u32.into();
-        let other_exponent: Exponent = 19315_u32.into();
-
-        let base: Element = 1033_u32.into();
-        let result = base.pow(&other_exponent);
-        let challenge = 15848_u32.into();
-        let response = 12460_u32.into();
-        let proof = Proof::simulate_exp(&public_key, &base, &result, &challenge, &response);
-
-        let status = proof.transcript_exp(&public_key, &base, &result);
-        dbg!(&status);
-        assert!(status.is_ok());
+            let status = proof.transcript_exp(&public_key, &base, &result);
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
     }
 }

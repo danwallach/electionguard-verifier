@@ -111,15 +111,12 @@ impl Message {
 pub mod test {
     use super::*;
     use crate::crypto::group::test::*;
-    use num::traits::Zero;
     use num::BigUint;
     use proptest::prelude::*;
 
     prop_compose! {
         /// Returns a tuple containing an arbitrary ElGamal keypair (private, public).
-        pub fn arb_elgamal_keypair()(private_key in arb_exponent()
-                .prop_filter("non-zero private key needed so ElGamal isn't a no-op",
-                    |k| !k.is_zero())) -> (Exponent, Element) {
+         pub fn arb_elgamal_keypair()(private_key in arb_nonzero_exponent()) -> (Exponent, Element) {
             let public_key = generator().pow(&private_key);
             (private_key, public_key)
         }
@@ -198,9 +195,8 @@ pub mod test {
         fn test_elgamal_reencryption(
             keypair in arb_elgamal_keypair(),
             m in arb_exponent(),
-            r1 in arb_exponent(),
-            r2 in arb_exponent()
-                .prop_filter("non-zero reencryption needed to change input", |r| !r.is_zero())) {
+            r1 in arb_nonzero_exponent(),
+            r2 in arb_nonzero_exponent()) {
 
             let encryption = Message::encrypt(&(keypair.1), m.as_uint(), &r1);
             let encrypted_zero = Message::encrypt(&(keypair.1), &BigUint::from(0_u32), &r2);
