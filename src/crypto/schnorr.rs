@@ -122,67 +122,73 @@ impl Status {
 #[cfg(test)]
 mod test {
     use super::Proof;
-    use crate::crypto::elgamal;
-    use crate::crypto::group::{generator, Exponent};
+    use crate::crypto::elgamal::test::*;
+    use crate::crypto::group::test::*;
     use crate::crypto::hash::hash_uee;
-    use num::traits::Pow;
+    use proptest::prelude::*;
 
-    /// Generate a key pair, construct a Schnorr proof of possession of the private key, and check
-    /// the proof.
-    #[test]
-    fn prove_check() {
-        let extended_base_hash = elgamal::test::extended_base_hash();
+    proptest! {
+        /// Generate a key pair, construct a Schnorr proof of possession of the private key, and check
+        /// the proof.
+        #[test]
+        fn prove_check(
+            keypair in arb_elgamal_keypair(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent()
+        ) {
+            let (secret_key, public_key) = keypair;
+            let proof = Proof::prove(&public_key, &secret_key, &one_time_exponent, |key, comm| {
+                hash_uee(&extended_base_hash, key, comm)
+            });
 
-        let secret_key = 18930_u32.into();
-        let public_key = generator().pow(&secret_key);
-        let one_time_exponent = 26664_u32.into();
-        let proof = Proof::prove(&public_key, &secret_key, &one_time_exponent, |key, comm| {
-            hash_uee(&extended_base_hash, key, comm)
-        });
+            let status = proof.check(&public_key, |key, comm| {
+                hash_uee(&extended_base_hash, key, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check(&public_key, |key, comm| {
-            hash_uee(&extended_base_hash, key, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// Generate a key pair, construct an invalid Schnorr proof using the wrong secret key, and
+        /// check the proof (which should fail).
+        #[test]
+        #[should_panic]
+        fn prove_check_fail(
+            keypair in arb_elgamal_keypair(),
+            extended_base_hash in arb_biguint(),
+            one_time_exponent in arb_exponent(),
+            other_secret_key in arb_exponent()
+        ) {
+            let (secret_key, public_key) = keypair;
+            prop_assume!(secret_key != other_secret_key);
 
-    /// Generate a key pair, construct an invalid Schnorr proof using the wrong secret key, and
-    /// check the proof (which should fail).
-    #[test]
-    #[should_panic]
-    fn prove_check_fail() {
-        let extended_base_hash = elgamal::test::extended_base_hash();
+            let proof = Proof::prove(
+                &public_key,
+                &other_secret_key,
+                &one_time_exponent,
+                |key, comm| hash_uee(&extended_base_hash, key, comm),
+            );
 
-        let secret_key: Exponent = 18930_u32.into();
-        let public_key = generator().pow(&secret_key);
-        let other_secret_key = 22703_u32.into();
-        let one_time_exponent = 26664_u32.into();
-        let proof = Proof::prove(
-            &public_key,
-            &other_secret_key,
-            &one_time_exponent,
-            |key, comm| hash_uee(&extended_base_hash, key, comm),
-        );
+            let status = proof.check(&public_key, |key, comm| {
+                hash_uee(&extended_base_hash, key, comm)
+            });
+            dbg!(&status);
+            assert!(status.is_ok());
+        }
 
-        let status = proof.check(&public_key, |key, comm| {
-            hash_uee(&extended_base_hash, key, comm)
-        });
-        dbg!(&status);
-        assert!(status.is_ok());
-    }
+        /// Generate a public key, construct a fake Schnorr proof using a pre-selected challenge, and
+        /// check the proof transcript (which should pass).
+        #[test]
+        fn simulate_transcript(
+            keypair in arb_elgamal_keypair(),
+            challenge in arb_exponent(),
+            response in arb_exponent()
+        ) {
+            let public_key = keypair.1;
+            let proof = Proof::simulate(&public_key, &challenge, &response);
 
-    /// Generate a public key, construct a fake Schnorr proof using a pre-selected challenge, and
-    /// check the proof transcript (which should pass).
-    #[test]
-    fn simulate_transcript() {
-        let public_key = 1647_u32.into();
-        let challenge = 10335_u32.into();
-        let response = 14942_u32.into();
-        let proof = Proof::simulate(&public_key, &challenge, &response);
-
-        let status = proof.transcript(&public_key);
-        dbg!(&status);
-        assert!(status);
+            let status = proof.transcript(&public_key);
+            dbg!(&status);
+            assert!(status);
+        }
     }
 }
