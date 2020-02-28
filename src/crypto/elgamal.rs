@@ -1,4 +1,4 @@
-use crate::crypto::group::{generator, Element, Exponent};
+use crate::crypto::group::{generator, prime_minus_one, Element, Exponent};
 use num::traits::Pow;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,15 @@ pub struct Message {
 impl Message {
     /// Encrypt `m` using `public_key` and a `one_time_secret` key.
     pub fn encrypt(public_key: &Element, m: &BigUint, one_time_secret: &Exponent) -> Message {
+        // If m >= p-1, then that's bad because it will wrap around and
+        // look as if m=0. We could have encrypt() return Option<Message>
+        // and push the problem on to our caller, but really we should
+        // just never see a message so big, thus we're going to panic
+        // and crash, instead.
+        if m >= prime_minus_one() {
+            panic!("Message out of range: {}", m)
+        }
+
         let g = generator();
         let h = public_key;
         let r = one_time_secret;
@@ -47,20 +56,20 @@ impl Message {
     }
 
     /// Decrypts a Message, yields `gᵐ` for plaintext `m`, requires knowing the appropriate
-    /// `private_key`. If the private_key is not correct, the results will be an
+    /// `secret_key`. If the secret_key is not correct, the results will be an
     /// unknown element. You need your own error checking. Similarly, you'll need your
     /// own logic to map from `gᵐ` back to `m` (e.g., a pre-computed lookup table).
-    pub fn decrypt(&self, private_key: &Exponent) -> Element {
+    pub fn decrypt(&self, secret_key: &Exponent) -> Element {
         // The message gives us g^r (self.public_key) and g^m * h^r (self.ciphertext)
-        // where h = g ^ private_key. So, we can compute (g^r)^a = g^ra, which we can
+        // where h = g ^ secret_key. So, we can compute (g^r)^a = g^ra, which we can
         // use to get back g^m, which isn't the plaintext, but it's no longer encrypted.
 
-        let g_ra = &self.public_key.pow(private_key);
+        let g_ra = &self.public_key.pow(secret_key);
         &self.ciphertext / g_ra
     }
 
     /// Decrypts a Message, yields `gᵐ` for plaintext `m`, but using the public-key
-    /// and one-time-secret rather than the private-key. If the arguments to this
+    /// and one-time-secret rather than the secret_key. If the arguments to this
     /// function are incorrect, the results will be an unknown element. You need
     ///  your own error checking. Similarly, you'll need your own logic to map from
     /// `gᵐ` back to `m` (e.g., a pre-computed lookup table).
@@ -70,7 +79,7 @@ impl Message {
         one_time_secret: &Exponent,
     ) -> Element {
         // The message gives us g^r (self.public_key) and g^m * h^r (self.ciphertext)
-        // where h = g ^ private_key. With the public key (g^a, not to be confused
+        // where h = g ^ secret_key. With the public key (g^a, not to be confused
         // with self.public_key), we can raise that to the rth power, yielding g^ra.
 
         // This decryption function is something that might be used when a voting
@@ -115,10 +124,10 @@ pub mod test {
     use proptest::prelude::*;
 
     prop_compose! {
-        /// Returns a tuple containing an arbitrary ElGamal keypair (private, public).
-         pub fn arb_elgamal_keypair()(private_key in arb_nonzero_exponent()) -> (Exponent, Element) {
-            let public_key = generator().pow(&private_key);
-            (private_key, public_key)
+        /// Returns a tuple containing an arbitrary ElGamal keypair (secret, public).
+         pub fn arb_elgamal_keypair()(secret_key in arb_nonzero_exponent()) -> (Exponent, Element) {
+            let public_key = generator().pow(&secret_key);
+            (secret_key, public_key)
         }
     }
 
@@ -132,13 +141,32 @@ pub mod test {
 
     proptest! {
         #[test]
+        #[should_panic]
+        fn test_elgamal_encryption_out_of_range(
+            keypair in arb_elgamal_keypair(),
+            m in arb_exponent(),
+            r in arb_exponent()
+        ) {
+            let huge_number = prime_minus_one() + m.as_uint();
+            let (secret_key, public_key) = keypair;
+
+            // this line should panic
+            let encryption = Message::encrypt(&public_key, &huge_number, &r);
+
+            // we shouldn't get here
+            let _decryption = encryption.decrypt(&secret_key);
+            assert!(false);
+        }
+
+        #[test]
         fn test_elgamal_normal_decryption(
             keypair in arb_elgamal_keypair(),
             m in arb_exponent(),
             r in arb_exponent()) {
 
-            let encryption = Message::encrypt(&(keypair.1), m.as_uint(), &r);
-            let decryption = encryption.decrypt(&(keypair.0));
+            let (secret_key, public_key) = keypair;
+            let encryption = Message::encrypt(&public_key, m.as_uint(), &r);
+            let decryption = encryption.decrypt(&secret_key);
 
             assert_eq!(generator().pow(&m), decryption);
         }
@@ -149,8 +177,9 @@ pub mod test {
             m in arb_exponent(),
             r in arb_exponent()) {
 
-            let encryption = Message::encrypt(&(keypair.1), m.as_uint(), &r);
-            let decryption = encryption.decrypt_with_one_time_secret(&(keypair.1), &r);
+            let public_key = keypair.1;
+            let encryption = Message::encrypt(&public_key, m.as_uint(), &r);
+            let decryption = encryption.decrypt_with_one_time_secret(&public_key, &r);
 
             assert_eq!(generator().pow(&m), decryption);
         }
@@ -164,11 +193,12 @@ pub mod test {
             r1 in arb_exponent(),
             r2 in arb_exponent()) {
 
-            let encryption1 = Message::encrypt(&(keypair.1), m1.as_uint(), &r1);
-            let encryption2 = Message::encrypt(&(keypair.1), m2.as_uint(), &r2);
+            let (secret_key, public_key) = keypair;
+            let encryption1 = Message::encrypt(&public_key, m1.as_uint(), &r1);
+            let encryption2 = Message::encrypt(&public_key, m2.as_uint(), &r2);
 
             let encrypted_sum = encryption1.h_add(&encryption2);
-            let decryption = encrypted_sum.decrypt(&(keypair.0));
+            let decryption = encrypted_sum.decrypt(&secret_key);
             let m_sum = m1 + m2;
 
             assert_eq!(generator().pow(&m_sum), decryption);
@@ -182,11 +212,12 @@ pub mod test {
             r1 in arb_exponent(),
             r2 in arb_exponent()) {
 
-            let encryption1 = Message::encrypt(&(keypair.1), m1.as_uint(), &r1);
-            let encryption2 = Message::encrypt(&(keypair.1), m2.as_uint(), &r2);
+            let (secret_key, public_key) = keypair;
+            let encryption1 = Message::encrypt(&public_key, m1.as_uint(), &r1);
+            let encryption2 = Message::encrypt(&public_key, m2.as_uint(), &r2);
 
             let encrypted_sum = encryption1.h_add(&encryption2).h_sub(&encryption2);
-            let decryption = encrypted_sum.decrypt(&(keypair.0));
+            let decryption = encrypted_sum.decrypt(&secret_key);
 
             assert_eq!(generator().pow(&m1), decryption);
         }
@@ -198,10 +229,11 @@ pub mod test {
             r1 in arb_nonzero_exponent(),
             r2 in arb_nonzero_exponent()) {
 
-            let encryption = Message::encrypt(&(keypair.1), m.as_uint(), &r1);
-            let encrypted_zero = Message::encrypt(&(keypair.1), &BigUint::from(0_u32), &r2);
+            let (secret_key, public_key) = keypair;
+            let encryption = Message::encrypt(&public_key, m.as_uint(), &r1);
+            let encrypted_zero = Message::encrypt(&public_key, &BigUint::from(0_u32), &r2);
             let reencryption = encryption.h_add(&encrypted_zero);
-            let decryption = reencryption.decrypt(&(keypair.0));
+            let decryption = reencryption.decrypt(&secret_key);
 
             assert_eq!(generator().pow(&m), decryption);
             assert!(reencryption.ciphertext != encryption.ciphertext);
