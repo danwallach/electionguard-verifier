@@ -392,7 +392,7 @@ pub fn generate_decrypted_value(
         }
     }
 
-    let M = &message.ciphertext / &check::compute_share_product(&shares);
+    let M = message.decrypt_with_known_product(&check::compute_share_product(&shares));
     let t = discrete_log(&M).as_uint().clone();
 
     schema::DecryptedValue {

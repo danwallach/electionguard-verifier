@@ -56,6 +56,12 @@ impl Message {
         }
     }
 
+    /// Decrypts a Message, yields `gᵐ` for plaintext `m`, but with the blinding
+    /// product (i.e., `gᵃʳ`) passed as an argument rather than internally computed.
+    pub fn decrypt_with_known_product(&self, product: &Element) -> Element {
+        &self.ciphertext / product
+    }
+
     /// Decrypts a Message, yields `gᵐ` for plaintext `m`, requires knowing the appropriate
     /// `product` (i.e., `gʳᵃ`). If the `product` is not correct, the results will be an
     /// unknown element. You need your own error checking. To get `m` from `gᵐ`, use `dlog::discrete_log`.
