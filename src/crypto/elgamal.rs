@@ -207,16 +207,4 @@ pub mod test {
             assert!(reencryption.ciphertext != encryption.ciphertext);
         }
     }
-
-    pub fn private_key() -> Exponent {
-        BigUint::from(2546_u32).into()
-    }
-
-    pub fn public_key() -> Element {
-        generator().pow(&private_key())
-    }
-
-    pub fn extended_base_hash() -> BigUint {
-        31268_u32.into()
-    }
 }
