@@ -2,12 +2,13 @@ use lazy_static::*;
 use num::traits::{Num, One, Pow, Zero};
 use num::BigUint;
 use serde::{Deserialize, Serialize};
+use std::hash::Hash;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 // TODO: custom serde instances that reject things not in the group
 
 /// An element of the multiplicative group of integers modulo some prime.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Element {
     #[serde(with = "crate::serialize::big_uint")]
@@ -15,7 +16,7 @@ pub struct Element {
 }
 
 /// An exponent in the additive group of integers modulo some prime minus one.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Exponent {
     #[serde(with = "crate::serialize::big_uint")]
@@ -24,7 +25,7 @@ pub struct Exponent {
 
 /// A coefficient of the polynomial used to reconstruct missing trustee keys.  This is simply an
 /// integer mod `p`.  Unlike `Element`, there is no requerement that it is non-zero.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Hash, Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Coefficient {
     #[serde(with = "crate::serialize::big_uint")]
@@ -40,6 +41,8 @@ impl Element {
     /// Inject an integer into the group: this wraps modulo the prime modulus if
     /// the number is greater than or equal to the modulus.
     pub fn new(element: BigUint) -> Element {
+        // TODO: this modulus operation could generate an element of zero.
+        // Is this a problem?
         Element::unchecked(element % &*PRIME_MODULUS)
     }
 
@@ -595,14 +598,14 @@ pub mod test {
     }
 
     prop_compose! {
-        /// Returns an element in Z_{p-1}, i.e., [0, p-1).
+        /// Returns an exponent in Z_{p-1}, i.e., [0, p-1).
         pub fn arb_exponent()(num in arb_biguint()) -> Exponent {
             Exponent::from(num.mod_floor(prime_minus_one()))
         }
     }
 
     prop_compose! {
-        /// Returns an element in Z_{p-1}*, i.e., [1,p-1).
+        /// Returns a non-zero exponent in Z_{p-1}*, i.e., [1,p-1).
         pub fn arb_nonzero_exponent()(
             num in arb_biguint()
                 .prop_map(|n| n.mod_floor(prime_minus_one()))
@@ -612,7 +615,7 @@ pub mod test {
     }
 
     prop_compose! {
-        /// Returns an element in Z_{p}, i.e., [0, p)
+        /// Returns a coefficient in Z_p, i.e., [0, p).
         pub fn arb_coefficient()(num in arb_biguint()) -> Coefficient {
             Coefficient::from(num.mod_floor(prime()))
         }

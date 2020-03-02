@@ -17,6 +17,7 @@ rand = "0.5.6" # incompatible API changes in the newer 0.7.x crate
 
 [dev-dependencies]
 proptest = "0.9.5"
+criterion = "0.3.1" 
 
 [lib]
 path = "src/lib.rs"
@@ -28,3 +29,7 @@ path = "src/main.rs"
 [[bin]]
 name = "encrypt"
 path = "src/bin/encrypt_election.rs"
+
+[[bench]]
+name = "dlog"
+harness = false

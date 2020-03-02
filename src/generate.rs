@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::check;
 use crate::crypto::chaum_pedersen;
+use crate::crypto::dlog::discrete_log;
 use crate::crypto::elgamal::Message;
 use crate::crypto::group::{generator, prime_minus_one, Coefficient, Element, Exponent};
 use crate::crypto::hash::{hash_uee, hash_umc, hash_umcc};
@@ -400,19 +401,6 @@ pub fn generate_decrypted_value(
         encrypted_value: message,
         shares,
     }
-}
-
-pub fn discrete_log(element: &Element) -> Exponent {
-    let g_inv = generator().inverse();
-
-    let mut count = Exponent::zero();
-    let mut cur = element.clone();
-    while !cur.is_one() {
-        cur = &cur * &g_inv;
-        count = count + Exponent::one();
-    }
-
-    count
 }
 
 pub fn random_element(rng: &mut impl Rng) -> Element {

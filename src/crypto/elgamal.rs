@@ -2,6 +2,7 @@ use crate::crypto::group::{generator, prime_minus_one, Element, Exponent};
 use num::traits::Pow;
 use num::BigUint;
 use serde::{Deserialize, Serialize};
+use std::hash::Hash;
 
 /// An ElGamal message `(c, d)` encoding zero. This is useful because
 /// you can only combine two ciphertexts if they both encode zero, as
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// A message that has been encrypted using exponential ElGamal.
 ///
 /// The encrypted message of the selection (the one or zero).
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Hash, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Message {
     /// The one-time public key `a = gʳ`, where `r` is the randomly
     /// generated one-time public key.
@@ -56,23 +57,32 @@ impl Message {
     }
 
     /// Decrypts a Message, yields `gᵐ` for plaintext `m`, requires knowing the appropriate
+    /// `product` (i.e., `gʳᵃ`). If the `product` is not correct, the results will be an
+    /// unknown element. You need your own error checking. To get `m` from `gᵐ`, use `dlog::discrete_log`.
+    pub fn decrypt_with_known_product(&self, product: &Element) -> Element {
+        // The message gives us g^r (self.public_key) and g^m * h^r (self.ciphertext)
+        // where h = g ^ secret_key. So, we can compute (g^r)^a = g^ra, which we can
+        // use to get back g^m, which isn't the plaintext, but it's no longer encrypted.
+
+        &self.ciphertext / product
+    }
+
+    /// Decrypts a Message, yields `gᵐ` for plaintext `m`, requires knowing the appropriate
     /// `secret_key`. If the secret_key is not correct, the results will be an
-    /// unknown element. You need your own error checking. Similarly, you'll need your
-    /// own logic to map from `gᵐ` back to `m` (e.g., a pre-computed lookup table).
+    /// unknown element. You need your own error checking. To get `m` from `gᵐ`, use `dlog::discrete_log`.
     pub fn decrypt(&self, secret_key: &Exponent) -> Element {
         // The message gives us g^r (self.public_key) and g^m * h^r (self.ciphertext)
         // where h = g ^ secret_key. So, we can compute (g^r)^a = g^ra, which we can
         // use to get back g^m, which isn't the plaintext, but it's no longer encrypted.
 
         let g_ra = &self.public_key.pow(secret_key);
-        &self.ciphertext / g_ra
+        self.decrypt_with_known_product(g_ra)
     }
 
     /// Decrypts a Message, yields `gᵐ` for plaintext `m`, but using the public-key
     /// and one-time-secret rather than the secret_key. If the arguments to this
     /// function are incorrect, the results will be an unknown element. You need
-    ///  your own error checking. Similarly, you'll need your own logic to map from
-    /// `gᵐ` back to `m` (e.g., a pre-computed lookup table).
+    ///  your own error checking. To get `m` from `gᵐ`, use `dlog::discrete_log`.
     pub fn decrypt_with_one_time_secret(
         &self,
         public_key: &Element,
@@ -88,7 +98,7 @@ impl Message {
         // random numbers after computing a ciphertext.
 
         let g_ra = &public_key.pow(one_time_secret);
-        &self.ciphertext / g_ra
+        self.decrypt_with_known_product(g_ra)
     }
 
     /// Homomorphic addition of encrypted messages.  Converts the encryptions of `a` and `b` into
