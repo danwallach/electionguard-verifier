@@ -103,9 +103,6 @@ pub mod test {
     /// General-purpose hash tester. If the hashes are different, the values must
     /// be different. If the values are equal, the hashes must be equal.
     fn hash_compare<V: Debug + PartialEq>(h1: &BigUint, h2: &BigUint, v1: &V, v2: &V) {
-        let h1 = &h1;
-        let h2 = &h2;
-
         if h1 != h2 {
             assert_ne!(v1, v2);
         }

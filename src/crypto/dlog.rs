@@ -4,13 +4,15 @@ use num::traits::One;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+type DLogCache = Arc<Mutex<(Element, u32, HashMap<Element, u32>)>>;
+
 /// Compute the discrete log, base `g` (from the common `generator`)
 /// of an `element`. If the element is `gᵐ` then `m` is returned.
 /// This uses a caching strategy, so O(m) work is necessary for
 /// the first time, but afterwards the results are cached, making
 /// this function run faster. This function is thread-safe.
 pub fn discrete_log(element: &Element) -> Exponent {
-    let cache = Arc::clone(&DLOG_CACHE);
+    let cache: DLogCache = Arc::clone(&DLOG_CACHE);
     let mut cache = cache.lock().unwrap();
     let (ref mut max_elem, ref mut max_exp, ref mut map) = *cache;
     let g = generator();
@@ -30,7 +32,7 @@ pub fn discrete_log(element: &Element) -> Exponent {
 
 /// Tells you how many values are saved in the cache behind `discrete_log`.
 pub fn discrete_log_cache_size() -> u32 {
-    let cache = Arc::clone(&DLOG_CACHE);
+    let cache: DLogCache = Arc::clone(&DLOG_CACHE);
     let mut cache = cache.lock().unwrap();
     let (_, ref mut max_exp, _) = *cache;
 
@@ -44,7 +46,7 @@ lazy_static! {
 
     // TODO: write the cache out to a file so we can precompute this
     // even for really large elections.
-    static ref DLOG_CACHE: Arc<Mutex<(Element, u32, HashMap<Element, u32>)>> = {
+    static ref DLOG_CACHE: DLogCache = {
         let mut map: HashMap<Element, u32> = HashMap::new();
         map.insert(Element::one(), 0u32);
         Arc::new(Mutex::new((Element::one(), 0u32, map)))
@@ -58,7 +60,12 @@ pub mod test {
     use num::BigUint;
     use proptest::prelude::*;
 
-    pub fn discrete_log_uncached(element: &Element) -> Exponent {
+    fn discrete_log_uncached(element: &Element) -> Exponent {
+        // This is the original code for dlog, which works
+        // its way backward until it hits 1 and stops. This
+        // does no caching, so it's O(n), every time. We're
+        // only going to use it for testing.
+
         let g_inv = generator().inverse();
 
         let mut count = Exponent::zero();

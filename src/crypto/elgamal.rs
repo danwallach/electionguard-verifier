@@ -75,8 +75,8 @@ impl Message {
         // where h = g ^ secret_key. So, we can compute (g^r)^a = g^ra, which we can
         // use to get back g^m, which isn't the plaintext, but it's no longer encrypted.
 
-        let g_ra = &self.public_key.pow(secret_key);
-        self.decrypt_with_known_product(g_ra)
+        let g_ra = self.public_key.pow(secret_key);
+        self.decrypt_with_known_product(&g_ra)
     }
 
     /// Decrypts a Message, yields `gᵐ` for plaintext `m`, but using the public-key
@@ -97,8 +97,8 @@ impl Message {
         // correctly. It also demonstrates the importance of throwing away the
         // random numbers after computing a ciphertext.
 
-        let g_ra = &public_key.pow(one_time_secret);
-        self.decrypt_with_known_product(g_ra)
+        let g_ra = public_key.pow(one_time_secret);
+        self.decrypt_with_known_product(&g_ra)
     }
 
     /// Homomorphic addition of encrypted messages.  Converts the encryptions of `a` and `b` into
